@@ -48,7 +48,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          node-version: 20
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -102,27 +102,13 @@ jobs:
           export PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/src-tauri/resources/chromium"
           python -m playwright install chromium
 
-          # 3. 安装 ffmpeg（视频处理）
-          mkdir -p src-tauri/resources/ffmpeg
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            curl -LsS https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip -o /tmp/ffmpeg.zip
-            unzip -o /tmp/ffmpeg.zip -d /tmp/ffmpeg-extract
-            cp /tmp/ffmpeg-extract/ffmpeg-master-latest-win64-gpl/bin/ffmpeg.exe src-tauri/resources/ffmpeg/
-            rm -rf /tmp/ffmpeg.zip /tmp/ffmpeg-extract
-          elif [ "$RUNNER_OS" = "Linux" ]; then
-            curl -LsS https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux-amd64-gpl.tar.xz -o /tmp/ffmpeg.tar.xz
-            mkdir -p /tmp/ffmpeg-extract
-            tar xf /tmp/ffmpeg.tar.xz -C /tmp/ffmpeg-extract --strip-components=1
-            cp /tmp/ffmpeg-extract/bin/ffmpeg src-tauri/resources/ffmpeg/
-            rm -rf /tmp/ffmpeg.tar.xz /tmp/ffmpeg-extract
-          elif [ "$RUNNER_OS" = "macOS" ]; then
-            brew install ffmpeg
-            cp "$(which ffmpeg)" src-tauri/resources/ffmpeg/
-          fi
-
-          # 4. 模型目录占位（应用运行时自动下载）
+          # 3. 模型目录占位（应用运行时自动下载）
           mkdir -p src-tauri/resources/data/models
           echo "Models are downloaded at runtime by the application." > src-tauri/resources/data/models/README.txt
+
+          # 注意：ffmpeg 不打包，用户需自行安装并在 PATH 中可用
+          # 应用启动时 lib.rs 会将 resources/ffmpeg 目录加入 PATH（如果存在），
+          # 但不打包 ffmpeg 也不影响功能——后端会从系统 PATH 中查找 ffmpeg。
 
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0.0"
