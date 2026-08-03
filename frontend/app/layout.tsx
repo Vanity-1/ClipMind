@@ -21,7 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN">
+    <html lang="zh-CN" suppressHydrationWarning>
       <head>
         {/* Google Fonts: Orbitron (display), Inter (body), JetBrains Mono (code) */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />

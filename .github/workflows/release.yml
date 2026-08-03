@@ -1,0 +1,124 @@
+# ============================================================
+# ClipMind Release Workflow
+# ============================================================
+# 触发条件：推送 v* 格式的 tag
+# 产出：
+#   - Docker 镜像（通过 Dockerfile，用户自行 build）
+#   - Tauri 桌面安装包（Windows .msi/.exe, macOS .dmg, Linux .AppImage/.deb）
+# ============================================================
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  # ============================================================
+  # Job 1: 构建 Tauri 桌面安装包（三平台并行）
+  # ============================================================
+  build-tauri:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: "--target aarch64-apple-darwin"
+            label: macOS-ARM
+          - platform: macos-latest
+            args: "--target x86_64-apple-darwin"
+            label: macOS-Intel
+          - platform: ubuntu-22.04
+            args: ""
+            label: Linux
+          - platform: windows-latest
+            args: ""
+            label: Windows
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Build frontend (static export)
+        run: |
+          cd frontend
+          npm run build
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build backend (PyInstaller)
+        run: pyinstaller packaging/clipmind-backend.spec --noconfirm
+
+      - name: Setup Tauri resources
+        shell: bash
+        run: |
+          mkdir -p src-tauri/resources/clipmind-backend
+          cp -r dist/clipmind-backend/* src-tauri/resources/clipmind-backend/
+          # Chromium 和 ffmpeg 由用户自行安装，不打包以控制体积
+          # 创建空目录占位（Tauri resources 路径需要存在）
+          mkdir -p src-tauri/resources/chromium
+          mkdir -p src-tauri/resources/ffmpeg
+          mkdir -p src-tauri/resources/data/models
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0.0"
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "ClipMind ${{ github.ref_name }}"
+          releaseBody: "See the assets to download and install this version."
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
+          projectPath: .
+
+  # ============================================================
+  # Job 2: 发布 Docker 部署说明（不构建镜像，用户自行 build）
+  # ============================================================
+  publish-release-notes:
+    needs: build-tauri
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Note
+        run: |
+          echo "Docker deployment: users run 'docker compose up --build' from the release tag."
+          echo "Tauri desktop builds: uploaded as release assets by build-tauri job."

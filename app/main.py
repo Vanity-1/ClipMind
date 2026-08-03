@@ -578,7 +578,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="ClipMind 知识库系统",
     description="将你的 B站/抖音收藏夹变成可对话的知识库",
-    version="0.4.0",
+    version="0.1.0",
     lifespan=lifespan,
 )
 
@@ -671,7 +671,7 @@ app.include_router(model_market.router)
 async def api_root():
     return {
         "message": "ClipMind API",
-        "version": "0.4.0",
+        "version": "0.1.0",
         "docs": "/docs",
         "status": "running",
     }
@@ -797,7 +797,7 @@ else:
     async def root():
         return {
             "message": "ClipMind 知识库系统",
-            "version": "0.4.0",
+            "version": "0.1.0",
             "docs": "/docs",
             "status": "running",
             "hint": "前端静态文件未找到，请先构建前端",
