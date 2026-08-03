@@ -26,11 +26,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # macOS ARM64: macos-latest 是 Apple Silicon 原生
           - platform: macos-latest
             args: "--target aarch64-apple-darwin"
             label: macOS-ARM
-          - platform: macos-latest
-            args: "--target x86_64-apple-darwin"
+          # macOS Intel: macos-13 是 Intel 原生，避免 PyInstaller 交叉编译问题
+          - platform: macos-13
+            args: ""
             label: macOS-Intel
           - platform: ubuntu-22.04
             args: ""
@@ -56,7 +58,9 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          # macos-latest (ARM64) 需要交叉编译 target（Tauri build --target）
+          # macos-13 (Intel) 原生 x86_64，无需额外 target
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || '' }}
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
@@ -86,13 +90,39 @@ jobs:
       - name: Setup Tauri resources
         shell: bash
         run: |
+          set -e
+
+          # 1. 复制 PyInstaller 后端产物
           mkdir -p src-tauri/resources/clipmind-backend
           cp -r dist/clipmind-backend/* src-tauri/resources/clipmind-backend/
-          # Chromium 和 ffmpeg 由用户自行安装，不打包以控制体积
-          # 创建空目录占位（Tauri resources 路径需要存在）
+
+          # 2. 安装 Chromium（Playwright，用于抖音扫码登录）
+          #    直接安装到 resources/chromium，打包后由 lib.rs 设置 PLAYWRIGHT_BROWSERS_PATH
           mkdir -p src-tauri/resources/chromium
+          export PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/src-tauri/resources/chromium"
+          python -m playwright install chromium
+
+          # 3. 安装 ffmpeg（视频处理）
           mkdir -p src-tauri/resources/ffmpeg
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            curl -LsS https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip -o /tmp/ffmpeg.zip
+            unzip -o /tmp/ffmpeg.zip -d /tmp/ffmpeg-extract
+            cp /tmp/ffmpeg-extract/ffmpeg-master-latest-win64-gpl/bin/ffmpeg.exe src-tauri/resources/ffmpeg/
+            rm -rf /tmp/ffmpeg.zip /tmp/ffmpeg-extract
+          elif [ "$RUNNER_OS" = "Linux" ]; then
+            curl -LsS https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux-amd64-gpl.tar.xz -o /tmp/ffmpeg.tar.xz
+            mkdir -p /tmp/ffmpeg-extract
+            tar xf /tmp/ffmpeg.tar.xz -C /tmp/ffmpeg-extract --strip-components=1
+            cp /tmp/ffmpeg-extract/bin/ffmpeg src-tauri/resources/ffmpeg/
+            rm -rf /tmp/ffmpeg.tar.xz /tmp/ffmpeg-extract
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            brew install ffmpeg
+            cp "$(which ffmpeg)" src-tauri/resources/ffmpeg/
+          fi
+
+          # 4. 模型目录占位（应用运行时自动下载）
           mkdir -p src-tauri/resources/data/models
+          echo "Models are downloaded at runtime by the application." > src-tauri/resources/data/models/README.txt
 
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0.0"
