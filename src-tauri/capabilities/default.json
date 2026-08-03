@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "ClipMind 默认权限：窗口管理与前端访问",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-set-focus"
+  ]
+}

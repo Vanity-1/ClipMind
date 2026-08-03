@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ClipMind",
+  "version": "0.4.2",
+  "identifier": "com.clipmind.desktop",
+  "build": {
+    "frontendDist": "../frontend/out",
+    "beforeDevCommand": "cd ../frontend && npm run dev",
+    "devUrl": "http://localhost:3000"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' http://127.0.0.1:8000 http://localhost:8000 https:; frame-ancestors 'none'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["msi", "nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "resources": [
+      "resources/clipmind-backend/**/*",
+      "resources/chromium/**/*",
+      "resources/ffmpeg/**/*",
+      "resources/data/models/**/*"
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "installerHooks": "nsis/uninstall.nsh"
+      }
+    }
+  }
+}
