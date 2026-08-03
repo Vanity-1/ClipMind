@@ -91,8 +91,7 @@ fn create_main_window(app: &tauri::App) -> tauri::Result<()> {
     .resizable(true)
     .fullscreen(false)
     .decorations(true)
-    .transparent(false)
-    .visible(false);
+        .visible(false);
 
     // Windows: 让本地地址绕过系统代理，确保后端健康检查和窗口导航不受代理影响。
     //
