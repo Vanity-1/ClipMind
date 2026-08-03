@@ -26,8 +26,7 @@
     ],
     "resources": [
       "resources/clipmind-backend/**/*",
-      "resources/chromium/**/*",
-      "resources/ffmpeg/**/*",
+      "resources/chromium/**/*",
       "resources/data/models/**/*"
     ],
     "windows": {
