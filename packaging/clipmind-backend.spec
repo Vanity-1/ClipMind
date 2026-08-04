@@ -251,6 +251,18 @@ a = Analysis(
         "pulsar",
         "mypy",
         "ruff",
+        # === 大型 ML 库排除（减小安装包体积 ~1.5GB）===
+        # torch / sentence-transformers 仅在 embedding_provider=local 时需要，
+        # 属于延迟导入（rag.py），排除不影响 API 模式 embedding。
+        # 用户如需本地 Embedding 可自行 pip install sentence-transformers。
+        "torch",
+        "torchvision",
+        "torchaudio",
+        "sentence_transformers",
+        "transformers",
+        "tensorboard",
+        "sympy",
+        "mkl",
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
