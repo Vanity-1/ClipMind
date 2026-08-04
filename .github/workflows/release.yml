@@ -92,6 +92,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          # 卸载 torch / sentence-transformers（~1.5GB），减小 Tauri bundle 体积
+          # 本地 Embedding 模式用户可自行 pip install sentence-transformers
+          pip uninstall -y torch torchvision torchaudio sentence-transformers transformers 2>/dev/null || true
           pip install pyinstaller
 
       - name: Build backend (PyInstaller)
