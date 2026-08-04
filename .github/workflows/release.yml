@@ -5,6 +5,8 @@
 # 产出：
 #   - Docker 镜像（通过 Dockerfile，用户自行 build）
 #   - Tauri 桌面安装包（Windows .msi/.exe, macOS .dmg, Linux .AppImage/.deb）
+#
+# 优化：使用 Rust/npm/pip 缓存加速构建，避免 Linux 超时
 # ============================================================
 
 name: Release
@@ -42,6 +44,7 @@ jobs:
             label: Windows
 
     runs-on: ${{ matrix.platform }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -49,18 +52,27 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          # macos-latest (ARM64) 需要交叉编译 target（Tauri build --target）
-          # macos-13 (Intel) 原生 x86_64，无需额外 target
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || '' }}
+
+      # Rust 编译缓存：首次构建 ~20min，后续 ~3min
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+          key: ${{ matrix.label }}
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
@@ -97,7 +109,6 @@ jobs:
           cp -r dist/clipmind-backend/* src-tauri/resources/clipmind-backend/
 
           # 2. 安装 Chromium（Playwright，用于抖音扫码登录）
-          #    直接安装到 resources/chromium，打包后由 lib.rs 设置 PLAYWRIGHT_BROWSERS_PATH
           mkdir -p src-tauri/resources/chromium
           export PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/src-tauri/resources/chromium"
           python -m playwright install chromium
@@ -105,10 +116,6 @@ jobs:
           # 3. 模型目录占位（应用运行时自动下载）
           mkdir -p src-tauri/resources/data/models
           echo "Models are downloaded at runtime by the application." > src-tauri/resources/data/models/README.txt
-
-          # 注意：ffmpeg 不打包，用户需自行安装并在 PATH 中可用
-          # 应用启动时 lib.rs 会将 resources/ffmpeg 目录加入 PATH（如果存在），
-          # 但不打包 ffmpeg 也不影响功能——后端会从系统 PATH 中查找 ffmpeg。
 
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0.0"
