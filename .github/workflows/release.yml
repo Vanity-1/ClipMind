@@ -6,7 +6,7 @@
 #   - Docker 镜像（通过 Dockerfile，用户自行 build）
 #   - Tauri 桌面安装包（Windows .msi/.exe, macOS .dmg, Linux .AppImage/.deb）
 #
-# 优化：使用 Rust/npm/pip 缓存加速构建，避免 Linux 超时
+# 优化：使用 Rust/npm/pip 缓存加速构建
 # ============================================================
 
 name: Release
@@ -45,14 +45,14 @@ jobs:
 
     runs-on: ${{ matrix.platform }}
     continue-on-error: ${{ matrix.label == 'macOS-Intel' }}
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
