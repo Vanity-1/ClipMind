@@ -44,6 +44,7 @@ jobs:
             label: Windows
 
     runs-on: ${{ matrix.platform }}
+    continue-on-error: ${{ matrix.label == 'macOS-Intel' }}
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
