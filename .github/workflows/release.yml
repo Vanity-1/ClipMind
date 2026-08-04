@@ -9,7 +9,7 @@
 # 优化：
 #   - Rust/npm/pip 三级缓存
 #   - Linux 只打 .deb（.rpm 打包极慢会导致超时）
-#   - macOS-Intel 设为可选（runner 紧张时不阻塞发布）
+#   - 排除 torch/sentence-transformers（~1.5GB），减小安装包体积
 # ============================================================
 
 name: Release
@@ -31,9 +31,6 @@ jobs:
           - platform: macos-latest
             args: "--target aarch64-apple-darwin"
             label: macOS-ARM
-          - platform: macos-13
-            args: ""
-            label: macOS-Intel
           - platform: ubuntu-22.04
             args: "--bundles deb"
             label: Linux
@@ -42,7 +39,6 @@ jobs:
             label: Windows
 
     runs-on: ${{ matrix.platform }}
-    continue-on-error: ${{ matrix.label == 'macOS-Intel' }}
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -89,6 +85,7 @@ jobs:
           npm run build
 
       - name: Install Python dependencies
+        shell: bash
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
