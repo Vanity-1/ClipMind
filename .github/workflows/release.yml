@@ -3,10 +3,13 @@
 # ============================================================
 # 触发条件：推送 v* 格式的 tag
 # 产出：
-#   - Docker 镜像（通过 Dockerfile，用户自行 build）
-#   - Tauri 桌面安装包（Windows .msi/.exe, macOS .dmg, Linux .AppImage/.deb）
+#   - Docker 部署文件（用户自行 build）
+#   - Tauri 桌面安装包（Windows .msi/.nsis, macOS .dmg, Linux .deb）
 #
-# 优化：使用 Rust/npm/pip 缓存加速构建
+# 优化：
+#   - Rust/npm/pip 三级缓存
+#   - Linux 只打 .deb（.rpm 打包极慢会导致超时）
+#   - macOS-Intel 设为可选（runner 紧张时不阻塞发布）
 # ============================================================
 
 name: Release
@@ -20,24 +23,19 @@ permissions:
   contents: write
 
 jobs:
-  # ============================================================
-  # Job 1: 构建 Tauri 桌面安装包（三平台并行）
-  # ============================================================
   build-tauri:
     strategy:
       fail-fast: false
       matrix:
         include:
-          # macOS ARM64: macos-latest 是 Apple Silicon 原生
           - platform: macos-latest
             args: "--target aarch64-apple-darwin"
             label: macOS-ARM
-          # macOS Intel: macos-13 是 Intel 原生，避免 PyInstaller 交叉编译问题
           - platform: macos-13
             args: ""
             label: macOS-Intel
           - platform: ubuntu-22.04
-            args: ""
+            args: "--bundles deb"
             label: Linux
           - platform: windows-latest
             args: ""
@@ -45,7 +43,7 @@ jobs:
 
     runs-on: ${{ matrix.platform }}
     continue-on-error: ${{ matrix.label == 'macOS-Intel' }}
-    timeout-minutes: 90
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -68,7 +66,6 @@ jobs:
         with:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || '' }}
 
-      # Rust 编译缓存：首次构建 ~20min，后续 ~3min
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
         with:
@@ -104,17 +101,13 @@ jobs:
         shell: bash
         run: |
           set -e
-
-          # 1. 复制 PyInstaller 后端产物
           mkdir -p src-tauri/resources/clipmind-backend
           cp -r dist/clipmind-backend/* src-tauri/resources/clipmind-backend/
 
-          # 2. 安装 Chromium（Playwright，用于抖音扫码登录）
           mkdir -p src-tauri/resources/chromium
           export PLAYWRIGHT_BROWSERS_PATH="$GITHUB_WORKSPACE/src-tauri/resources/chromium"
           python -m playwright install chromium
 
-          # 3. 模型目录占位（应用运行时自动下载）
           mkdir -p src-tauri/resources/data/models
           echo "Models are downloaded at runtime by the application." > src-tauri/resources/data/models/README.txt
 
@@ -134,9 +127,6 @@ jobs:
           args: ${{ matrix.args }}
           projectPath: .
 
-  # ============================================================
-  # Job 2: 发布 Docker 部署说明（不构建镜像，用户自行 build）
-  # ============================================================
   publish-release-notes:
     needs: build-tauri
     runs-on: ubuntu-latest
