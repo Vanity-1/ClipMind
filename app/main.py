@@ -578,7 +578,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="ClipMind 知识库系统",
     description="将你的 B站/抖音收藏夹变成可对话的知识库",
-    version="0.4.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
@@ -755,15 +755,19 @@ async def open_external(payload: OpenExternalRequest):
 #
 # 搜索顺序：
 #   1. 打包模式：exe 同级目录 / frontend/out
-#   2. 打包模式：exe 同级目录 / frontend_dist（兼容旧路径）
-#   3. 开发模式：项目根 / frontend/out
-#   4. 开发模式：项目根 / frontend_dist
+#   2. 打包模式：exe 同级目录 / _internal/frontend/out（PyInstaller 6.x onedir）
+#   3. 打包模式：exe 同级目录 / frontend_dist（兼容旧路径）
+#   4. 开发模式：项目根 / frontend/out
+#   5. 开发模式：项目根 / frontend_dist
 if getattr(sys, "frozen", False):
     _APP_BASE = Path(sys.executable).resolve().parent
 else:
     _APP_BASE = Path(__file__).resolve().parent.parent
 
 _FRONTEND_DIR = _APP_BASE / "frontend" / "out"
+if not _FRONTEND_DIR.exists():
+    # PyInstaller 6.x onedir 将 datas 放在 _internal/ 子目录下
+    _FRONTEND_DIR = _APP_BASE / "_internal" / "frontend" / "out"
 if not _FRONTEND_DIR.exists():
     _FRONTEND_DIR = _APP_BASE / "frontend_dist"
 if not _FRONTEND_DIR.exists() and not getattr(sys, "frozen", False):
@@ -797,7 +801,7 @@ else:
     async def root():
         return {
             "message": "ClipMind 知识库系统",
-            "version": "0.4.0",
+            "version": "0.2.0",
             "docs": "/docs",
             "status": "running",
             "hint": "前端静态文件未找到，请先构建前端",

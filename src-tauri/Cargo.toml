@@ -1,6 +1,6 @@
 [package]
 name = "clipmind"
-version = "0.1.0"
+version = "0.2.0"
 description = "ClipMind — 收藏夹知识库桌面应用"
 authors = ["ClipMind"]
 edition = "2021"
