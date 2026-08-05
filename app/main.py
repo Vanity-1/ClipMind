@@ -765,6 +765,9 @@ else:
 
 _FRONTEND_DIR = _APP_BASE / "frontend" / "out"
 if not _FRONTEND_DIR.exists():
+    # PyInstaller 6.x onedir puts datas under _internal/ subdirectory
+    _FRONTEND_DIR = _APP_BASE / "_internal" / "frontend" / "out"
+if not _FRONTEND_DIR.exists():
     _FRONTEND_DIR = _APP_BASE / "frontend_dist"
 if not _FRONTEND_DIR.exists() and not getattr(sys, "frozen", False):
     # 开发模式兜底：从 main.py 所在的 app/ 向上找项目根的 frontend/out
