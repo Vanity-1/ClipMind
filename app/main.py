@@ -578,7 +578,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="ClipMind 知识库系统",
     description="将你的 B站/抖音收藏夹变成可对话的知识库",
-    version="0.1.0",
+    version="0.4.0",
     lifespan=lifespan,
 )
 
@@ -671,7 +671,7 @@ app.include_router(model_market.router)
 async def api_root():
     return {
         "message": "ClipMind API",
-        "version": "0.1.0",
+        "version": "0.4.0",
         "docs": "/docs",
         "status": "running",
     }
@@ -765,9 +765,6 @@ else:
 
 _FRONTEND_DIR = _APP_BASE / "frontend" / "out"
 if not _FRONTEND_DIR.exists():
-    # PyInstaller 6.x onedir puts datas under _internal/ subdirectory
-    _FRONTEND_DIR = _APP_BASE / "_internal" / "frontend" / "out"
-if not _FRONTEND_DIR.exists():
     _FRONTEND_DIR = _APP_BASE / "frontend_dist"
 if not _FRONTEND_DIR.exists() and not getattr(sys, "frozen", False):
     # 开发模式兜底：从 main.py 所在的 app/ 向上找项目根的 frontend/out
@@ -800,7 +797,7 @@ else:
     async def root():
         return {
             "message": "ClipMind 知识库系统",
-            "version": "0.1.0",
+            "version": "0.4.0",
             "docs": "/docs",
             "status": "running",
             "hint": "前端静态文件未找到，请先构建前端",

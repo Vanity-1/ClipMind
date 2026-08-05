@@ -147,9 +147,16 @@ export default function DouyinPanel({ onSelectionChange }: DouyinPanelProps) {
     try {
       const r = await douyinApi.listFolders(getDouyinSessionId());
       setFolders(r);
-    } catch (e) {
+    } catch (e: any) {
       console.error("加载抖音收藏夹失败", e);
-      setMsg("加载抖音收藏夹失败，请稍后重试");
+      if (e?.status === 401) {
+        // session 过期，清除旧登录态，提示重新登录
+        try { localStorage.removeItem("douyin_session"); } catch {}
+        setDouyinUser(null);
+        setMsg("抖音登录已过期，请重新扫码登录");
+      } else {
+        setMsg("加载抖音收藏夹失败，请稍后重试");
+      }
     }
   }
 

@@ -98,10 +98,10 @@ export default function Home() {
   // 按平台分别管理 folderIds，避免跨平台错乱
   const [biliFolderIds, setBiliFolderIds] = useState<number[]>([]);
   const [douyinFolderIds, setDouyinFolderIds] = useState<number[]>([]);
-  const [platform, setPlatform] = useState<"bilibili" | "douyin" | "both">("bilibili");
+  const [platform, setPlatform] = useState<"bilibili" | "douyin">("bilibili");
 
   // 切换平台模式时清空选中的收藏夹，避免跨平台 folder_ids 错乱
-  const switchPlatform = useCallback((next: "bilibili" | "douyin" | "both") => {
+  const switchPlatform = useCallback((next: "bilibili" | "douyin") => {
     setBiliFolderIds([]);
     setDouyinFolderIds([]);
     setPlatform(next);
@@ -111,6 +111,17 @@ export default function Home() {
   const [leftWidth, setLeftWidth] = useState(320);
   const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLElement>(null);
+
+  // 页面刷新后，根据已登录平台自动设置默认显示面板（仅执行一次）
+  const initialPlatformSet = useRef(false);
+  useEffect(() => {
+    if (anyLoggedIn && !initialPlatformSet.current) {
+      initialPlatformSet.current = true;
+      if (!biliLoggedIn && douyinLoggedIn) {
+        setPlatform("douyin");
+      }
+    }
+  }, [anyLoggedIn, biliLoggedIn, douyinLoggedIn]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -150,6 +161,7 @@ export default function Home() {
     setShowLogin(false);
     safeSetItem("bili_session", sid);
     safeSetItem("bili_user", info.uname);
+    setPlatform("bilibili");
     notifyAuthChanged();
   };
 
@@ -157,6 +169,7 @@ export default function Home() {
     setShowLogin(false);
     if (sid) safeSetItem("douyin_session", sid);
     safeSetItem("douyin_user", user.nickname || user.uid || "抖音用户");
+    setPlatform("douyin");
     notifyAuthChanged();
   };
 
@@ -216,6 +229,16 @@ export default function Home() {
           )}
           {anyLoggedIn ? (
             <>
+              {!biliLoggedIn && (
+                <button onClick={() => { setLoginDefaultTab("bilibili"); setShowLogin(true); }} className="btn btn-primary" style={{ fontSize: 13, padding: "6px 14px" }}>
+                  登录B站
+                </button>
+              )}
+              {!douyinLoggedIn && (
+                <button onClick={() => { setLoginDefaultTab("douyin"); setShowLogin(true); }} className="btn btn-primary" style={{ fontSize: 13, padding: "6px 14px", background: "#fe2c55" }}>
+                  登录抖音
+                </button>
+              )}
               <span className="user-chip">
                 {biliLoggedIn && (
                   <>
@@ -296,12 +319,25 @@ export default function Home() {
             {platform === "bilibili" && (
               <>
                 <aside className="panel panel-sources" style={{ width: leftWidth, flexShrink: 0 }} aria-label="收藏夹面板">
-                  <SourcesPanel
-                    sessionId={auth?.bili_session || ""}
-                    onBuildDone={() => setStatsKey((v) => v + 1)}
-                    onSelectionChange={setBiliFolderIds}
-                    refreshSignal={ragDataSignal}
-                  />
+                  {biliLoggedIn ? (
+                    <SourcesPanel
+                      sessionId={auth?.bili_session || ""}
+                      onBuildDone={() => setStatsKey((v) => v + 1)}
+                      onSelectionChange={setBiliFolderIds}
+                      refreshSignal={ragDataSignal}
+                    />
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 16, padding: 24 }}>
+                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="1.5">
+                        <rect x="3" y="11" width="18" height="11" rx="2" />
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                      </svg>
+                      <p style={{ color: "var(--muted)", fontSize: 14 }}>B站未登录</p>
+                      <button onClick={() => { setLoginDefaultTab("bilibili"); setShowLogin(true); }} className="btn btn-primary btn-sm">
+                        扫码登录B站
+                      </button>
+                    </div>
+                  )}
                 </aside>
 
                 <div className="resizer" onMouseDown={handleMouseDown} style={{ cursor: "col-resize" }} />
@@ -314,7 +350,6 @@ export default function Home() {
                   <div className="platform-toggle">
                     <button className="platform-btn active">📺 B站</button>
                     <button className="platform-btn douyin" onClick={() => switchPlatform("douyin")}>🎵 抖音</button>
-                    <button className="platform-btn both" onClick={() => switchPlatform("both")}>双面板</button>
                   </div>
                 </div>
               </>
@@ -337,40 +372,6 @@ export default function Home() {
                   <div className="platform-toggle">
                     <button className="platform-btn" onClick={() => switchPlatform("bilibili")}>📺 B站</button>
                     <button className="platform-btn douyin active">🎵 抖音</button>
-                    <button className="platform-btn both" onClick={() => switchPlatform("both")}>双面板</button>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* === 双面板模式 === */}
-            {platform === "both" && (
-              <>
-                <aside className="panel panel-sources" style={{ width: leftWidth, flexShrink: 0, display: "flex", flexDirection: "column" }} aria-label="收藏夹面板">
-                  <div style={{ flex: 1, overflow: "auto", borderBottom: "1px solid var(--border)" }}>
-                    <SourcesPanel
-                      sessionId={auth?.bili_session || ""}
-                      onBuildDone={() => setStatsKey((v) => v + 1)}
-                      onSelectionChange={setBiliFolderIds}
-                      refreshSignal={ragDataSignal}
-                    />
-                  </div>
-                  <div style={{ flex: 1, overflow: "auto" }}>
-                    <DouyinPanel onSelectionChange={setDouyinFolderIds} />
-                  </div>
-                </aside>
-
-                <div className="resizer" onMouseDown={handleMouseDown} style={{ cursor: "col-resize" }} />
-
-                <section className="panel panel-chat" style={{ flex: 1 }}>
-                  <ChatPanel statsKey={statsKey} sessionId="" folderIds={[...biliFolderIds, ...douyinFolderIds]} platform={undefined} />
-                </section>
-
-                <div style={{ position: "absolute", top: 12, left: leftWidth + 30, zIndex: 10 }}>
-                  <div className="platform-toggle">
-                    <button className="platform-btn" onClick={() => switchPlatform("bilibili")}>📺 B站</button>
-                    <button className="platform-btn douyin" onClick={() => switchPlatform("douyin")}>🎵 抖音</button>
-                    <button className="platform-btn both active">双面板</button>
                   </div>
                 </div>
               </>

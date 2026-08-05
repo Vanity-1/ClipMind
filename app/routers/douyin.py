@@ -182,7 +182,8 @@ async def _require_douyin_session(session_id: Optional[str], db: AsyncSession) -
                 "platform": Platform.DOUYIN,
             }
             return session_id, session_id
-        raise HTTPException(status_code=401, detail="未登录抖音或会话已过期")
+        # 传入的 session_id 已失效，回退到 douyin-active 内存缓存继续查找
+        # （避免前端持有过期 session_id 时直接 401 无法回退）
 
     # 2. 回退到 douyin-active 内存缓存
     c = login_sessions.get("douyin-active") or {}
@@ -207,7 +208,7 @@ async def _require_douyin_session(session_id: Optional[str], db: AsyncSession) -
         }
         return row.session_id, row.session_id
 
-    raise HTTPException(status_code=401, detail="未登录抖音，请传入 session_id 或先登录")
+    raise HTTPException(status_code=401, detail="未登录抖音或会话已过期，请重新登录")
 
 
 async def _verify_folder_ownership(db: AsyncSession, folder_id: int, user_scope: str) -> FavoriteFolder:

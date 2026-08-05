@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { authApi, douyinApi, QRCodeResponse, UserInfo, DouyinQRCodeResponse } from "@/lib/api";
@@ -414,6 +414,13 @@ function DouyinPanel({ onSuccess }: {
 /* ---------- Main Modal ---------- */
 export default function LoginModal({ isOpen, onClose, onBiliSuccess, onDouyinSuccess, defaultTab }: Props) {
   const [tab, setTab] = useState<PlatformTab>(defaultTab || "bilibili");
+
+  // 每次打开弹窗时，根据 defaultTab 重置当前标签页
+  useEffect(() => {
+    if (isOpen && defaultTab) {
+      setTab(defaultTab);
+    }
+  }, [isOpen, defaultTab]);
 
   useEffect(() => {
     if (!isOpen) return;
