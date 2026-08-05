@@ -122,34 +122,84 @@ class RAGService:
             )
             logger.info(f"使用 OllamaEmbeddings 初始化成功 (model={ollama_model}, base_url={ollama_url})")
         elif emb_provider == "local":
-            # 本地向量模型（HuggingFace）：bge-small-zh / m3e-base 等
+            # 本地向量模型（bge-small-zh / m3e-base 等）
             # 由模型市场下载到 data/models/embeddings/<id>/，embedding_model 字段存本地路径
-            try:
-                from langchain_huggingface import HuggingFaceEmbeddings
-            except ImportError as exc:
-                logger.error("缺少 langchain-huggingface，无法初始化本地 Embedding")
-                raise RuntimeError(
-                    "本地 Embedding 初始化失败，请运行 pip install -r requirements.txt"
-                ) from exc
             if not emb_model or not os.path.isdir(emb_model):
                 raise RuntimeError(
                     f"本地向量模型路径无效: {emb_model!r}。"
                     f"请先在模型市场下载向量模型，或检查 embedding_model 配置。"
                 )
             # 预检权重文件：目录存在但缺权重文件时给出明确提示，
-            # 避免 HuggingFaceEmbeddings 抛出底层英文异常让人困惑
-            _weight_files = ("model.safetensors", "pytorch_model.bin", "model.bin")
-            if not any(os.path.exists(os.path.join(emb_model, wf)) for wf in _weight_files):
+            # 避免底层抛出英文异常让人困惑
+            _pt_weight_files = ("model.safetensors", "pytorch_model.bin", "model.bin")
+            _onnx_weight_files = (
+                os.path.join("onnx", "model.onnx"),
+                os.path.join("onnx", "model_quantized.onnx"),
+                "model.onnx",
+            )
+            _has_pt = any(
+                os.path.exists(os.path.join(emb_model, wf)) for wf in _pt_weight_files
+            )
+            _has_onnx = any(
+                os.path.exists(os.path.join(emb_model, wf)) for wf in _onnx_weight_files
+            )
+            if not _has_pt and not _has_onnx:
                 raise RuntimeError(
                     f"本地向量模型不完整：目录 {emb_model} 中缺少权重文件"
-                    f"（model.safetensors / pytorch_model.bin）。"
-                    f"请在模型市场重新下载该模型。"
+                    f"（model.safetensors / model.onnx）。请在模型市场重新下载该模型。"
                 )
-            self.embeddings = HuggingFaceEmbeddings(
-                model_name=emb_model,
-                encode_kwargs={"normalize_embeddings": True},
-            )
-            logger.info(f"使用 HuggingFaceEmbeddings 初始化成功 (model={emb_model})")
+
+            # 优先 ONNX Runtime 推理（安装包内置 onnxruntime，不依赖 torch）。
+            # 仅当模型无 ONNX 权重时才回退到 sentence-transformers。
+            if _has_onnx:
+                try:
+                    from app.services.local_onnx_embeddings import LocalOnnxEmbeddings
+                    self.embeddings = LocalOnnxEmbeddings(
+                        model_dir=emb_model,
+                        model_name=os.path.basename(emb_model.rstrip("/\\")),
+                    )
+                    logger.info(
+                        f"使用 LocalOnnxEmbeddings 初始化成功 "
+                        f"(model={emb_model}, onnx={self.embeddings.onnx_path})"
+                    )
+                except Exception as exc:
+                    # ONNX 初始化失败（如缺 onnxruntime），回退到 HuggingFaceEmbeddings
+                    logger.warning(
+                        f"ONNX Embedding 初始化失败，回退到 HuggingFaceEmbeddings: {exc}"
+                    )
+                    try:
+                        from langchain_huggingface import HuggingFaceEmbeddings
+                    except ImportError as exc2:
+                        raise RuntimeError(
+                            "本地 Embedding 初始化失败：ONNX 推理不可用"
+                            f"（{exc}），且缺少 sentence-transformers（{exc2}）。"
+                            "请安装 onnxruntime 后重试，或切换到 API Embedding 模式。"
+                        ) from exc2
+                    self.embeddings = HuggingFaceEmbeddings(
+                        model_name=emb_model,
+                        encode_kwargs={"normalize_embeddings": True},
+                    )
+                    logger.info(
+                        f"使用 HuggingFaceEmbeddings 初始化成功 (model={emb_model})"
+                    )
+            else:
+                # 无 ONNX 权重（如 m3e-base），必须走 sentence-transformers
+                try:
+                    from langchain_huggingface import HuggingFaceEmbeddings
+                except ImportError as exc:
+                    logger.error("缺少 langchain-huggingface，无法初始化本地 Embedding")
+                    raise RuntimeError(
+                        "本地 Embedding 初始化失败：该模型无 ONNX 权重，"
+                        "需要 sentence-transformers。请安装依赖后重试，"
+                        "或切换到 API Embedding 模式。"
+                    ) from exc
+                self.embeddings = HuggingFaceEmbeddings(
+                    model_name=emb_model,
+                    encode_kwargs={"normalize_embeddings": True},
+                )
+                logger.info(
+                    f"使用 HuggingFaceEmbeddings 初始化成功 (model={emb_model})"
+                )
         else:
             # OpenAI 兼容协议（OpenAI 官方、Azure、第三方兼容 API）
             # 覆盖 text-embedding-3-small 等模型，与测试端点协议一致

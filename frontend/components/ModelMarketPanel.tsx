@@ -18,6 +18,7 @@ interface ModelState {
   downloaded: boolean;
   active: boolean;
   downloading: boolean;
+  onnxMissing: boolean;
   progress: number;
   downloaded_mb: number;
   total_mb: number;
@@ -46,6 +47,7 @@ function defaultModelState(): ModelState {
     downloaded: false,
     active: false,
     downloading: false,
+    onnxMissing: false,
     progress: 0,
     downloaded_mb: 0,
     total_mb: 0,
@@ -86,6 +88,7 @@ export default function ModelMarketPanel({ isOpen, onClose }: ModelMarketPanelPr
           downloaded: !!m.downloaded,
           active: !!m.active,
           downloading: !!m.downloading,
+          onnxMissing: !!m.onnx_missing,
         };
       }
       setStates(newStates);
@@ -470,6 +473,13 @@ function ModelCard({ model, state, onDownload, onCancel, onApply, onDelete }: Mo
       {state.active && !state.downloaded && !state.downloading && (
         <div className="model-card-error" style={{ background: "var(--warning-bg, #fef3c7)", color: "var(--warning-text, #92400e)" }}>
           模型文件缺失，请重新下载后才能使用
+        </div>
+      )}
+
+      {/* 已下载但缺少 ONNX 权重（旧版本下载的模型，打包环境无 torch 时必须走 ONNX 推理） */}
+      {state.downloaded && state.onnxMissing && !state.downloading && (
+        <div className="model-card-error" style={{ background: "var(--warning-bg, #fef3c7)", color: "var(--warning-text, #92400e)" }}>
+          该模型缺少 ONNX 权重，请点击「重新下载」补齐后使用本地向量功能
         </div>
       )}
 

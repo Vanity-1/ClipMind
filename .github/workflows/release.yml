@@ -10,6 +10,7 @@
 #   - Rust/npm/pip 三级缓存
 #   - Linux 只打 .deb（.rpm 打包极慢会导致超时）
 #   - 排除 torch/sentence-transformers（~1.5GB），减小安装包体积
+#   - 本地 Embedding 走 ONNX Runtime（onnxruntime 内置，不依赖 torch）
 # ============================================================
 
 name: Release
@@ -90,7 +91,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           # 卸载 torch / sentence-transformers（~1.5GB），减小 Tauri bundle 体积
-          # 本地 Embedding 模式用户可自行 pip install sentence-transformers
+          # 本地 Embedding 已改走 ONNX Runtime，卸载不影响 ONNX 推理路径
           pip uninstall -y torch torchvision torchaudio sentence-transformers transformers 2>/dev/null || true
           pip install pyinstaller
 
@@ -122,7 +123,7 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "ClipMind ${{ github.ref_name }}"
           releaseBody: "See the assets to download and install this version."
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
           projectPath: .

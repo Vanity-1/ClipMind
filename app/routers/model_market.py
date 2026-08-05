@@ -44,6 +44,9 @@ router = APIRouter(prefix="/api/model-market", tags=["模型市场"])
 #   size_mb       预估大小（MB），仅用于 UI 提示，不强制校验
 #   engine        ollama / hf_whisper / hf_embedding
 #   model_id      实际拉取名（Ollama model 名 / HF repo_id / whisper size）
+#   onnx_repo     （可选）hf_embedding 的 ONNX 权重仓库（transformers.js 格式，
+#                 含 onnx/model_quantized.onnx）。配置后下载时自动补齐 ONNX 权重，
+#                 使打包环境（无 torch）可用 onnxruntime 推理。
 #   recommended   是否标记为推荐
 #   description   描述文本
 
@@ -87,6 +90,7 @@ CATALOG: list[dict] = [
         "size_mb": 95,
         "engine": "hf_embedding",
         "model_id": "BAAI/bge-small-zh-v1.5",
+        "onnx_repo": "Xenova/bge-small-zh-v1.5",
         "recommended": True,
         "description": "智源 BGE 中文小模型，512 维，体积小、速度快",
     },
@@ -97,6 +101,7 @@ CATALOG: list[dict] = [
         "size_mb": 1300,
         "engine": "hf_embedding",
         "model_id": "BAAI/bge-large-zh-v1.5",
+        "onnx_repo": "Xenova/bge-large-zh-v1.5",
         "recommended": False,
         "description": "智源 BGE 中文大模型，1024 维，精度更高",
     },
@@ -253,13 +258,18 @@ def _is_embedding_downloaded(model_id: str) -> bool:
     """检查本地向量模型是否已下载（完整）。
 
     判定条件：目录存在 + config.json 存在 + 至少一个权重文件存在。
+    权重文件包括 pytorch 权重（model.safetensors 等）与 ONNX 权重
+    （onnx/model_quantized.onnx 等），任一存在即视为完整。
     仅检查 config.json 会导致不完整下载（缺权重文件）被误判为已完成。
     """
     path = _local_embedding_path(model_id)
     if not os.path.isdir(path) or not os.path.exists(os.path.join(path, "config.json")):
         return False
     # 必须存在至少一个权重文件，否则下载不完整
-    weight_files = ("model.safetensors", "pytorch_model.bin", "model.bin")
+    weight_files = (
+        "model.safetensors", "pytorch_model.bin", "model.bin",
+        *_ONNX_WEIGHT_FILES,
+    )
     return any(os.path.exists(os.path.join(path, wf)) for wf in weight_files)
 
 
@@ -297,6 +307,7 @@ async def _build_status_map() -> dict[str, dict]:
         engine = item["engine"]
         downloaded = False
         active = False
+        onnx_missing = False
         if engine == "ollama":
             downloaded = mid in ollama_models
             active = (active_llm == mid)
@@ -305,6 +316,14 @@ async def _build_status_map() -> dict[str, dict]:
             # active 时 embedding_model 字段存的是本地路径
             # bool() 显式转换，避免 "" 短路求值返回空字符串而非 False
             active = bool(active_embedding) and active_embedding.endswith(mid.replace("/", "_"))
+            # ONNX 权重缺失标记：已下载但缺 onnx（旧版本下载的模型），
+            # 提示用户重新下载以补齐 ONNX 权重（打包环境无 torch，必须走 onnxruntime）
+            if downloaded and item.get("onnx_repo"):
+                local_emb_dir = _local_embedding_path(item["model_id"])
+                onnx_missing = not any(
+                    os.path.exists(os.path.join(local_emb_dir, wf))
+                    for wf in _ONNX_WEIGHT_FILES
+                )
         elif engine == "hf_whisper":
             downloaded = _is_whisper_downloaded(item["model_id"])
             active = (active_asr == item["model_id"])
@@ -315,6 +334,7 @@ async def _build_status_map() -> dict[str, dict]:
             "downloaded": downloaded,
             "active": active,
             "downloading": bool(downloading),
+            "onnx_missing": onnx_missing,
         }
     return status_map
 
@@ -425,10 +445,47 @@ def _validate_model_files(local_dir: str, weight_files: tuple[str, ...], model_i
     )
 
 
+# ONNX 权重文件候选（transformers.js 仓库惯例：onnx/model_quantized.onnx 优先）
+_ONNX_WEIGHT_FILES = (
+    "onnx/model_quantized.onnx",
+    "onnx/model.onnx",
+    "onnx/model_int8.onnx",
+)
+
+
+def _download_onnx_weight(onnx_repo: str, local_dir: str, hf_hub_download) -> str:
+    """从 transformers.js 仓库下载 ONNX 权重到本地模型目录的 onnx/ 子目录。
+
+    优先 model_quantized.onnx（int8 量化，体积小、速度快），
+    缺失时回退 model.onnx（fp32）。
+    返回下载后的本地路径。
+    """
+    import os
+    for candidate in ("onnx/model_quantized.onnx", "onnx/model.onnx", "onnx/model_int8.onnx"):
+        try:
+            # local_dir 指定后 hf_hub_download 会把文件写入该目录（含 onnx/ 前缀）
+            path = hf_hub_download(
+                repo_id=onnx_repo,
+                filename=candidate,
+                local_dir=local_dir,
+            )
+            # 确保权重位于 <local_dir>/onnx/ 下（hf_hub_download 会保留 filename 相对路径）
+            logger.info(f"[ModelMarket] ONNX 权重下载成功: {onnx_repo}/{candidate}")
+            return path
+        except Exception as e:
+            logger.warning(f"[ModelMarket] ONNX 权重 {candidate} 下载失败: {e}")
+    raise RuntimeError(
+        f"ONNX 权重下载失败（{onnx_repo}），候选文件均不可用。"
+        f"请检查网络或镜像配置后重试。"
+    )
+
+
 async def _download_hf(task: DownloadTask, repo_id: str, local_dir: str, is_whisper: bool) -> None:
     """通过 huggingface_hub.snapshot_download 下载模型。
 
     is_whisper=True 时下载 faster-whisper 模型（repo_id 固定为 Systran/faster-whisper-<size>）。
+    hf_embedding 且 catalog 配置了 onnx_repo 时，下载完成后自动补齐 ONNX 权重，
+    使打包环境（无 torch）可用 onnxruntime 推理。
 
     进度上报策略：
     - huggingface_hub.snapshot_download 不支持原生进度回调
@@ -460,7 +517,7 @@ async def _download_hf(task: DownloadTask, repo_id: str, local_dir: str, is_whis
                 "total_mb": round(expected_total_mb, 2),
             })
 
-        from huggingface_hub import snapshot_download
+        from huggingface_hub import snapshot_download, hf_hub_download
         # 确保在 snapshot_download 调用前 Xet 已禁用
         #（_apply_hf_mirror 已 patch 一次，这里兜底防止 reload 时序问题）
         try:
@@ -471,14 +528,18 @@ async def _download_hf(task: DownloadTask, repo_id: str, local_dir: str, is_whis
 
         # whisper 模型 repo 在 Systran 命名空间下
         actual_repo = f"Systran/faster-whisper-{repo_id}" if is_whisper else repo_id
+        onnx_repo = (entry or {}).get("onnx_repo") or ""
 
         def _do_download():
             os.makedirs(os.path.dirname(local_dir), exist_ok=True)
-            return snapshot_download(
+            snapshot_download(
                 repo_id=actual_repo,
                 local_dir=local_dir,
                 # 不指定 allow_patterns，下载全部文件
             )
+            # 补齐 ONNX 权重（仅 hf_embedding + catalog 配置了 onnx_repo 时）
+            if onnx_repo and not is_whisper:
+                _download_onnx_weight(onnx_repo, local_dir, hf_hub_download)
 
         # 在线程池中执行同步下载，通过轮询 task._stop_event 实现取消
         download_future = asyncio.ensure_future(asyncio.to_thread(_do_download))
@@ -517,7 +578,12 @@ async def _download_hf(task: DownloadTask, repo_id: str, local_dir: str, is_whis
         if is_whisper:
             _validate_model_files(local_dir, ("model.bin", "model.safetensors"), task.model_id)
         else:
-            _validate_model_files(local_dir, ("model.safetensors", "pytorch_model.bin", "model.bin"), task.model_id)
+            # 向量模型：pytorch 权重或 onnx 权重任一存在即视为完整
+            _weight_candidates = (
+                "model.safetensors", "pytorch_model.bin", "model.bin",
+                *_ONNX_WEIGHT_FILES,
+            )
+            _validate_model_files(local_dir, _weight_candidates, task.model_id)
 
         # 下载完成，精确计算实际大小
         actual_mb = _calc_dir_size_mb(local_dir)

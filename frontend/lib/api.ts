@@ -1207,6 +1207,8 @@ export interface CatalogModel {
   downloaded?: boolean;
   active?: boolean;
   downloading?: boolean;
+  // 已下载但缺少 ONNX 权重（旧版本下载的模型），需要重新下载以支持无 torch 环境
+  onnx_missing?: boolean;
 }
 
 export interface ModelCatalog {

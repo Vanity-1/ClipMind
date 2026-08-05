@@ -252,9 +252,9 @@ a = Analysis(
         "mypy",
         "ruff",
         # === 大型 ML 库排除（减小安装包体积 ~1.5GB）===
-        # torch / sentence-transformers 仅在 embedding_provider=local 时需要，
-        # 属于延迟导入（rag.py），排除不影响 API 模式 embedding。
-        # 用户如需本地 Embedding 可自行 pip install sentence-transformers。
+        # torch / sentence-transformers / transformers 仅本地 Embedding 需要，
+        # 现已改走 ONNX Runtime（onnxruntime 在 hiddenimports/binaries 中收集），
+        # 排除不影响 ONNX 推理路径。
         "torch",
         "torchvision",
         "torchaudio",
